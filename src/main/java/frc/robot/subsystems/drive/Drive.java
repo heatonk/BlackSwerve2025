@@ -290,6 +290,12 @@ public class Drive extends SubsystemBase {
     return getPose().getRotation();
   }
 
+  /** Human-readable heading for AdvantageScope. Use this to check gyro sign/reset. */
+  @AutoLogOutput(key = "Odometry/HeadingDegrees")
+  public double getHeadingDegrees() {
+    return getRotation().getDegrees();
+  }
+
   /** Resets the current odometry pose. */
   public void setPose(Pose2d pose) {
     poseEstimator.resetPosition(rawGyroRotation, getModulePositions(), pose);

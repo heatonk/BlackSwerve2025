@@ -110,25 +110,40 @@ public class RobotContainer {
   /** Defines all button -> command mappings for the driver's flight stick. */
   private void configureButtonBindings() {
     // Default command: field-relative drive.
-    //   X velocity  <- joystick Y (forward/back tilt), negated so forward push = forward motion
-    //   Y velocity  <- joystick X (left/right tilt),   negated so left push = left motion
-    //   rotation    <- joystick Z (twist),             negated so twist-left = CCW rotation
+    // Signs below are calibrated to THIS specific flight stick's axis reports
+    // (verified via Drive/JoystickInput logs in AdvantageScope):
+    //   getY() : positive when stick is pushed FORWARD  (non-standard for a flight
+    //            stick -- aircraft convention would be positive when pulled BACK,
+    //            hence NO negation to get "push forward = +xVel").
+    //   getX() : positive when stick is pushed RIGHT    (standard); negated to get
+    //            "push left = +yVel" per WPILib convention.
+    //   getZ() : positive when twisted RIGHT            (standard); NOT negated
+    //            per driver preference so "twist right = +omega".
+    // If you swap sticks and the robot drives the wrong way, revisit these signs
+    // rather than editing DriveCommands or Drive.
     drive.setDefaultCommand(
         DriveCommands.joystickDrive(
-            drive, () -> -joystick.getY(), () -> -joystick.getX(), () -> -joystick.getZ()));
+            drive, () -> joystick.getY(), () -> -joystick.getX(), () -> joystick.getZ()));
+
+    // Route the throttle slider into the shooter so the driver can dial the
+    // flywheel speed up and down without touching code. Convention: throttle up
+    // = full power, throttle down = stopped. If your stick reports the opposite,
+    // swap this to () -> -joystick.getThrottle() rather than editing Shooter.java.
+    shooter.setThrottleSupplier(joystick::getThrottle);
 
     // Button 2 (thumb/top button): spin up the flywheels. Hold to keep wheels spinning.
-    joystick.button(2).whileTrue(shooter.runFlywheelsCommand(10.0));
+    // Voltage setpoint lives in Shooter.java; binding here is purely "what state to enter."
+    joystick.button(2).whileTrue(shooter.shoot());
 
     // Button 1 (trigger): run the feeder. Driver should wait until the flywheels
     // are up to speed (Button 2 held) before pulling this.
-    joystick.button(1).whileTrue(shooter.runFeederCommand(6.0));
+    joystick.button(1).whileTrue(shooter.feed());
 
     // Button 3: switch the swerve modules to an X pattern to resist being pushed.
     joystick.button(3).onTrue(Commands.runOnce(drive::stopWithX, drive));
 
     // Button 5: eject -- reverse the feeder to clear a jammed ball. Held while pressed.
-    joystick.button(5).whileTrue(shooter.runFeederCommand(-4.0));
+    joystick.button(5).whileTrue(shooter.eject());
 
     // Button 7: re-zero the gyro so the robot's current heading becomes "forward".
     // Useful if the field-relative drive feels rotated relative to where the driver

@@ -30,6 +30,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
+import org.littletonrobotics.junction.Logger;
 
 public class DriveCommands {
   private static final double DEADBAND = 0.1;
@@ -68,15 +69,28 @@ public class DriveCommands {
       DoubleSupplier omegaSupplier) {
     return Commands.run(
         () -> {
+          // Snapshot the supplier values. These are POST-inversion by RobotContainer,
+          // so they already represent chassis-frame commands (positive x = forward,
+          // positive y = left, positive omega = CCW) rather than raw stick axes.
+          // If you want to log the truly raw joystick axes, add that at the
+          // RobotContainer level where you have a stick reference.
+          double commandedForward = xSupplier.getAsDouble();
+          double commandedLeft = -ySupplier.getAsDouble();
+          double commandedOmega = -omegaSupplier.getAsDouble();
+          Logger.recordOutput("Drive/JoystickInput/CommandedForward", commandedForward);
+          Logger.recordOutput("Drive/JoystickInput/CommandedLeft", commandedLeft);
+          Logger.recordOutput("Drive/JoystickInput/CommandedOmega", commandedOmega);
+
           // Get linear velocity
           Translation2d linearVelocity =
-              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
+              getLinearVelocityFromJoysticks(commandedForward, commandedLeft);
 
           // Apply rotation deadband
-          double omega = MathUtil.applyDeadband(omegaSupplier.getAsDouble(), DEADBAND);
+          double omega = MathUtil.applyDeadband(commandedOmega, DEADBAND);
 
           // Square rotation value for more precise control
           omega = Math.copySign(omega * omega, omega);
+          Logger.recordOutput("Drive/JoystickInput/CommandedOmegaShaped", omega);
 
           // Convert to field relative speeds & send command
           ChassisSpeeds speeds =
@@ -84,9 +98,17 @@ public class DriveCommands {
                   linearVelocity.getX() * drive.getMaxLinearSpeedMetersPerSec(),
                   linearVelocity.getY() * drive.getMaxLinearSpeedMetersPerSec(),
                   omega * drive.getMaxAngularSpeedRadPerSec());
+          // Log the field-relative speeds BEFORE the frame conversion. Comparing
+          // this against SwerveChassisSpeeds/Setpoints (robot-relative, already
+          // logged in Drive.runVelocity) shows whether the gyro rotation is
+          // producing the wrong transform.
+          Logger.recordOutput("Drive/JoystickInput/FieldRelativeSpeeds", speeds);
+
           boolean isFlipped =
               DriverStation.getAlliance().isPresent()
                   && DriverStation.getAlliance().get() == Alliance.Red;
+          Logger.recordOutput("Drive/JoystickInput/AllianceFlip", isFlipped);
+
           drive.runVelocity(
               ChassisSpeeds.fromFieldRelativeSpeeds(
                   speeds,
